@@ -1,148 +1,308 @@
-# SHG Digital Record Platform
+**SHG Records — Self Help Group Digital Record Platform**
 
-## Overview
-A mobile-first record-keeping and governance transparency platform for Self Help Groups (SHG) for rural women in Maharashtra. This is NOT a banking app - it tracks records of savings, meetings, loans, and group governance.
+A mobile-first record-keeping and governance transparency platform for Self Help Groups (SHGs) built for rural women in Maharashtra, India. Runs as a native Android app and as a web application. Supports English and Marathi.
 
-## Tech Stack
-- **Frontend**: Expo React Native with Expo Router (file-based routing)
-- **Backend**: Express.js REST API (all data lives server-side)
-- **Storage**: Dual-mode — MemStorage (in-memory, no config) or DatabaseStorage (PostgreSQL/Supabase via Drizzle ORM). Automatically selected based on `DATABASE_URL` env var.
-- **Auth**: Token-based sessions (UUID tokens, server-side session map, only token stored in AsyncStorage)
-- **Language**: TypeScript
-- **Font**: Poppins (via @expo-google-fonts/poppins)
+---
 
-## Architecture
-- **Contexts**: AuthContext (user/group auth via API), LanguageContext (EN/MR), DataContext (all data via REST API)
-- **API Client**: `lib/api.ts` — `apiGet`, `apiPost`, `apiPatch`, `apiPut` with automatic Bearer token injection
-- **Roles**: President (admin of group), Member
-- **Group System**: Unique Group IDs, isolated data per group
-- **Localization**: English and Marathi throughout
+**Features**
 
-## Backend API Endpoints (all prefixed /api)
-- POST /api/auth/register/president — create group + president account
-- POST /api/auth/register/member — join existing group as member
-- POST /api/auth/login — returns session token
-- POST /api/auth/logout — invalidates token
-- GET  /api/auth/session — restore session from token
-- POST /api/auth/verify-password — verify current user's password
-- GET/POST /api/groups/:groupId/meetings — list or create meetings
-- PATCH /api/meetings/:meetingId — update meeting (attendance, status, etc.)
-- GET/POST /api/groups/:groupId/payments — list or declare payments
-- PATCH /api/payments/:paymentId — verify/reject payment (president)
-- GET/POST /api/groups/:groupId/loans — list or request loans
-- PATCH /api/loans/:loanId/approve — approve loan (president)
-- PATCH /api/loans/:loanId/reject — reject loan (president)
-- GET/POST /api/loans/:loanId/repayments — list or add repayments
-- GET /api/groups/:groupId/repayments — all repayments for group
-- GET/PUT /api/groups/:groupId/settings — group loan settings
-- GET/PUT /api/groups/:groupId/rules — group rules text
-- GET /api/groups/:groupId/members — list members
-- PATCH /api/members/:memberId/status — toggle member active/left (president)
+- Member registration and role management (President, Member)
+- Meeting scheduling, attendance tracking, and notes
+- Payment declarations and president verification
+- Loan management with approval workflow, auto-applied interest, and tiered duration rules
+- Loan repayment tracking
+- PDF statement generation per member
+- Configurable group settings and custom rules (president-only)
+- Voice assistant with Android native speech recognition and Groq-powered intent classification
+- Full history screen with per-member filtering (president)
+- English / Marathi language toggle throughout
 
-## Storage Layer (server/storage.ts)
-IStorage interface with two implementations:
-- `MemStorage` — in-memory, used when `DATABASE_URL` is not set
-- `DatabaseStorage` — Drizzle ORM + PostgreSQL/Supabase, used when `DATABASE_URL` is set
-- Covers: Sessions, Users, Groups, Meetings, Payments, Loans, LoanRepayments, GroupSettings, GroupRules
-- Schema defined in `shared/schema.ts` (Drizzle); push with `npm run db:push`
-- Database connection initialized in `server/db.ts`
+---
 
-## App Structure
-```
-app/
-  _layout.tsx        - Root layout with providers
-  index.tsx          - Auth gate
-  (auth)/            - Login & Register screens
-  (main)/            - Tab navigation (Dashboard, Meetings, Payments, More)
-  create-meeting.tsx - Create meeting modal
-  meeting/[id].tsx   - Meeting detail
-  members.tsx        - Member directory
-  member/[id].tsx    - Member detail with history
-  loans.tsx          - Loan list
-  create-loan.tsx    - Request loan modal (password-protected, auto interest)
-  loan/[id].tsx      - Loan detail
-  loan-settings.tsx  - President-only: configure interest rate, max loan amount, duration rules
-  rules.tsx          - Group rules
-  history.tsx        - Full history (payments, loans, meetings)
-contexts/
-  AuthContext.tsx     - Auth & session management (includes verifyPassword)
-  LanguageContext.tsx - EN/MR translations
-  DataContext.tsx     - All data CRUD operations + GroupSettings
+**Tech Stack**
+
+| Layer        | Technology                                              |
+|--------------|---------------------------------------------------------|
+| Frontend     | Expo React Native with Expo Router (file-based routing) |
+| Backend      | Node.js + Express.js REST API                           |
+| Database     | PostgreSQL via Supabase (Drizzle ORM)                   |
+| NLP / Voice  | Groq API — `llama-3.1-8b-instant`                       |
+| Auth         | Token-based sessions (UUID, server-side session map)    |
+| Language     | TypeScript                                              |
+
+---
+
+**Environment Variables**
+
+Copy `.env.example` to `.env` and set the following:
+
+| Variable                | Required            | Description                                                                           |
+|-------------------------|---------------------|---------------------------------------------------------------------------------------|
+| `PORT`                  | No (default 5000)   | Port the Express server listens on                                                    |
+| `SUPABASE_DATABASE_URL` | For persistence     | Supabase PostgreSQL connection string (takes priority over `DATABASE_URL`)            |
+| `DATABASE_URL`          | Fallback            | Any PostgreSQL connection string. Managed automatically by Replit if using Replit DB. |
+| `GROQ_API_KEY`          | For voice assistant | API key from [console.groq.com](https://console.groq.com/keys)                        |
+| `SESSION_SECRET`        | Recommended         | Secret for session signing                                                            |
+
+**Without either database variable** the app runs with in-memory storage — data resets on every server restart. Suitable for quick local testing only.
+
+**Database priority:** `SUPABASE_DATABASE_URL` is checked first, then `DATABASE_URL`. This allows Supabase to be used explicitly without touching Replit's managed `DATABASE_URL`.
+
+---
+
+**Local Development Setup**
+
+**Prerequisites**
+
+- Node.js 22
+- npm
+- For Android: Android Studio with Android SDK, `adb` in PATH
+
+### 1. Install dependencies
+
+```bash
+npm install
 ```
 
-## Key Features
-- President creates group with unique ID, members join via group ID
-- Dashboard stat cards are clickable (navigate to Members, Meetings, Payments, Loans)
-- Dashboard unified recent activity feed (payments + loans + meetings combined)
-- Meeting management (create, edit, cancel, attendance tracking)
-- Payment tracking (member declares, president verifies)
-- Loan records (request with password verification, approve, repayment tracking)
-- Loan Settings (president-only): configurable interest rate, max loan amount, duration rules per tier
-- Interest rate auto-applied from group settings — not entered per loan
-- Max loan amount validation in both DataContext and UI with clear error messages
-- Duration rules tied to loan amount (small → short, large → longer); validated on request
-- History screen with filterable payment/loan/meeting records (president can filter by member)
-- Member detail page shows full payment & loan history with dates
-- PDF statement generation for members
-- Group rules (president edits, members view)
-- English/Marathi language toggle
-- **Voice Assistant**: floating mic button on dashboard; uses browser Web Speech API (no native deps) to capture speech in English or Marathi, sends transcript to backend `/api/nlp/classify` (Gemini 1.5 Flash), then navigates to the correct screen
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your values. At minimum set `PORT=5000`.
+
+### 3. Connect Supabase (for persistent data)
+
+1. Create a project at [supabase.com](https://supabase.com).
+2. Go to **Settings → Database → Connection string → URI** — copy the Transaction pooler URI (port 6543).
+3. Add to `.env`:
+   ```
+   SUPABASE_DATABASE_URL=postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres
+   ```
+4. Push the schema:
+   ```bash
+   npm run db:push
+   ```
+
+### 4. Run in development mode
+
+Open two terminals:
+
+**Terminal 1 — Backend (port 5000):**
+```bash
+npm run server:dev
+```
+
+**Terminal 2 — Frontend (port 8081):**
+```bash
+npm run expo:dev
+```
+
+Open **http://localhost:5000** in your browser. The backend proxies all non-API requests to the Expo web server at port 8081 when no static build is present.
+
+---
+
+## Production (Static) Mode
+
+```bash
+npm run build:web        # exports Expo web app to web-build/
+npm run server:dev       # serves web-build/ + API on port 5000
+```
+
+The server detects `web-build/index.html` at startup and serves it statically instead of proxying to Metro.
+
+---
+
+## Android APK
+
+### Requirements
+
+- Android Studio installed
+- `%LOCALAPPDATA%\Android\Sdk\platform-tools` in PATH (Windows)
+- Developer Options + USB Debugging enabled on device
+
+### 1. Set the API URL (baked into the JS bundle at build time)
+
+```powershell
+$env:EXPO_PUBLIC_API_URL = "https://your-deployed-app.replit.app"
+```
+
+### 2. Generate the Android native project
+
+```powershell
+npx expo prebuild --platform android --clean
+```
+
+### 3. Verify Android SDK is detected
+
+```powershell
+npx expo doctor
+```
+
+### 4. Build and install on a connected device (debug)
+
+```powershell
+npx expo run:android --device
+```
+
+This installs a debug APK that connects to Metro bundler. Suitable for development and testing.
+
+### 5. Build a standalone release APK (for distribution)
+
+```powershell
+cd android
+.\gradlew.bat assembleRelease
+```
+
+Output: `android\app\build\outputs\apk\release\app-release-unsigned.apk`
+
+Enable **Install from unknown sources** on the target device to sideload this APK. For Play Store distribution, the APK must be signed.
+
+---
+
+## Dependency Versions (Android)
+
+React Native's renderer is compiled against a specific React version. Keep these pinned exactly:
+
+| Package        | Version   |
+|----------------|-----------|
+| `react`        | `19.1.4`  |
+| `react-dom`    | `19.1.4`  |
+| `react-native` | `0.81.6`  |
+
+Use `--save-exact` to prevent npm from upgrading across minor versions:
+
+```bash
+npm install react@19.1.4 react-dom@19.1.4 --save-exact --legacy-peer-deps
+```
+
+---
+
+## Available Scripts
+
+| Script                  | Description                                           |
+|-------------------------|-------------------------------------------------------|
+| `npm run server:dev`    | Start Express backend in development mode (port 5000) |
+| `npm run expo:dev`      | Start Expo Metro bundler for web (port 8081)          |
+| `npm run build:web`     | Export Expo web app to `web-build/` for production    |
+| `npm run server:build`  | Bundle Express server via esbuild to `server_dist/`   |
+| `npm run server:prod`   | Run the bundled production server                     |
+| `npm run db:push`       | Push Drizzle schema to PostgreSQL database            |
+
+---
+
+## Deployment (Replit Autoscale)
+
+The project is configured for Replit Autoscale deployment:
+
+- **Build step:** `npm run build:web && npm run server:build`
+  - Exports the Expo web app to `web-build/`
+  - Bundles the Express server to `server_dist/`
+- **Run step:** `npm run server:prod` (`cross-env NODE_ENV=production node server_dist/index.js`)
+- **Port:** `5000`
+
+Set `SUPABASE_DATABASE_URL` and `GROQ_API_KEY` as Secrets in the Replit dashboard before deploying.
+
+---
 
 ## Voice Assistant
-- **Frontend**: `lib/nlpHandler.ts` — `startVoiceRecognition()` (Web Speech API, `mr-IN`/`en-IN`), `classifyIntent()` (calls backend), `processVoiceCommand()`
-- **Backend**: `POST /api/nlp/classify` (auth-protected) — calls Gemini 1.5 Flash; returns `{ action, route, confidence, replyEn, replyMr }`
-- **Supported intents**: VIEW_DASHBOARD, VIEW_MEETINGS, VIEW_PAYMENTS, VIEW_LOANS, VIEW_MEMBERS, VIEW_HISTORY, VIEW_RULES, LOAN_SETTINGS, REQUEST_LOAN, UNKNOWN
-- **Mic button states**: idle (blue) → listening (red, pulsing) → processing (teal) → result (green) or error (red)
-- **Overlay**: shows "Listening…" / transcript / Gemini reply while active
-- **Security**: `GEMINI_API_KEY` stays on server; browser never sees it
-- **Browser support**: Chrome (desktop/Android) required for Web Speech API; shows friendly error in other browsers
 
-## GroupSettings (stored server-side per group)
-- interestRate: number (%) — default 2%
-- maxLoanAmount: number (Rs.) — default Rs. 50,000
-- durationRules: DurationRule[] — default 3 tiers:
-  - Up to Rs. 5,000 → 1–6 months
-  - Up to Rs. 20,000 → 3–12 months
-  - Up to Rs. 50,000 → 6–24 months
+A floating mic button on the dashboard activates voice navigation.
 
-## Running the Project
+**On Android (native):**
+- Uses `expo-speech-recognition` with `en-IN` or `mr-IN` language code
+- No internet required for speech capture — processed on-device by Android
 
-### Production / Static mode (recommended)
+**On Web (Chrome only):**
+- Uses the browser's Web Speech API
+- Requires Chrome — other browsers show a friendly error
+
+**Intent classification (both platforms):**
+- The captured transcript is sent to `POST /api/nlp/classify` (auth-protected)
+- The backend calls Groq (`llama-3.1-8b-instant`) to classify intent
+- Returns `{ action, route, confidence, replyEn, replyMr }`
+- The app navigates to the matched screen and shows the Groq reply
+
+**Supported voice commands:** show dashboard, show meetings, show payments, show loans, show members, show history, show rules, loan settings, request loan.
+
+**`GROQ_API_KEY` stays server-side** — the client never sees it.
+
+---
+
+## Storage Modes
+
+| Condition                     | Storage Used      | Behaviour                       |
+|-------------------------------|-------------------|---------------------------------|
+| Neither database variable set | `MemStorage`      | In-memory, resets on restart    |
+| `SUPABASE_DATABASE_URL` set   | `DatabaseStorage` | Supabase PostgreSQL via Drizzle |
+| Only `DATABASE_URL` set       | `DatabaseStorage` | Any PostgreSQL via Drizzle      |
+
+---
+
+## Project Structure
+
 ```
-npm install
-npm run build:web      # generates web-build/ from Expo static export
-npm run server:dev     # serves web-build/ + API on port 5000
+app/
+  _layout.tsx          Root layout with providers
+  index.tsx            Auth gate (redirects to login or dashboard)
+  (auth)/              Login and Register screens
+  (main)/              Tab navigation: Dashboard, Meetings, Payments, More
+  create-meeting.tsx   Create meeting modal
+  meeting/[id].tsx     Meeting detail and attendance
+  members.tsx          Member directory
+  member/[id].tsx      Member detail with payment and loan history
+  loans.tsx            Loan list
+  create-loan.tsx      Request loan modal (password-protected, auto interest)
+  loan/[id].tsx        Loan detail and repayment tracking
+  loan-settings.tsx    President-only: interest rate, max amount, duration rules
+  rules.tsx            Group rules (president edits, members view)
+  history.tsx          Full history with member filter (president)
+contexts/
+  AuthContext.tsx      Auth and session management
+  LanguageContext.tsx  English / Marathi translations
+  DataContext.tsx      All data CRUD via REST API, GroupSettings
+lib/
+  api.ts               API client (apiGet, apiPost, apiPatch, apiPut)
+  nlpHandler.ts        Voice recognition and intent classification
+server/
+  index.ts             Express server entry point
+  routes.ts            All API route definitions
+  storage.ts           MemStorage and DatabaseStorage implementations
+  db.ts                Drizzle + PostgreSQL connection
+shared/
+  schema.ts            Drizzle table definitions (single source of truth)
+constants/             App colors and translation strings
 ```
-Open http://localhost:5000 — no Expo dev server required.
 
-### Development mode (hot reload)
-Start both workflows:
-- Start Backend (port 5000) — Express API + proxy to Expo dev server
-- Start Frontend (port 8081) — Expo Metro bundler with hot reload
+---
 
-The backend auto-detects: if `web-build/index.html` exists → serve static; otherwise → proxy to port 8081.
+## Roles
 
-## Recent Changes
-- Fixed data loading resilience: replaced `Promise.all` with `Promise.allSettled` in DataContext so individual API endpoint failures don't crash the entire data load; each endpoint is loaded independently with fallback to previous state
-- Bug fix: after registration/login, all 7 data endpoints (meetings, payments, loans, repayments, members, rules, settings) now all load correctly and independently
-- Member group validation confirmed working: joining with a non-existent group ID returns `groupNotFound` error, displayed in UI as "Group ID not found"
-- President can declare their own payments (not just members)
-- Phone number limited to exactly 10 digits on login and register screens
-- President can remove/reactivate members from member list screen
-- Added static web build support: `npm run build:web` exports to `web-build/` via `expo export --platform web`
-- Backend auto-detects: serves `web-build/` statically when present, falls back to proxy for dev mode
-- Removed Expo Go QR code landing page; backend now proxies non-API requests to Expo web dev server
-- App runs as a normal web application — no QR scanning required
-- Initial build: Full SHG platform with auth, meetings, payments, loans, rules, members, language toggle
-- Added clickable dashboard stat cards for quick navigation
-- Added password authentication requirement before loan requests (modal verification)
-- Created History screen accessible from More tab (filterable by member for president)
-- Enhanced member detail page with full payment & loan history sections
-- AuthContext now includes verifyPassword method
-- Dashboard: unified Recent Activity feed combining payments, loans, meetings
-- Loan Settings screen: president can configure interest rate, max loan amount, and tiered duration rules
-- create-loan: removed manual interest field, auto-applies group interest, shows policy card and duration hints
-- DataContext: GroupSettings interface, validateLoanRequest, getDurationRuleForAmount exported helpers
-- Member PDF statement: professionally formatted with header, member details, summary cards (including total repaid), savings history, loan history with repayments, attendance records, and fine history.
-- Member Detail Page: Quick stats for payments, loans, and attendance; history sections for payments and loans; toggle status (Active/Left).
-- Voice Assistant: floating mic button added to dashboard; Web Speech API (no native packages) captures speech in en-IN/mr-IN; transcript sent to backend POST /api/nlp/classify which calls Gemini 1.5 Flash to classify intent and return a navigation route; animated overlay shows listening/processing/result states; GEMINI_API_KEY stays server-side; requires Chrome browser.
+| Feature                       | Member | President |
+|-------------------------------|--------|-----------|
+| Declare payment               | Yes    | Yes       |
+| Verify payments               | No     | Yes       |
+| Request loan                  | Yes    | Yes       |
+| Approve / reject loans        | No     | Yes       |
+| Add loan repayment            | No     | Yes       |
+| Schedule meetings             | No     | Yes       |
+| Edit attendance               | No     | Yes       |
+| Manage group settings         | No     | Yes       |
+| Edit group rules              | No     | Yes       |
+| Remove / reactivate members   | No     | Yes       | 
+| Generate member PDF statement | No     | Yes       |
+
+---
+
+## Group Settings (president-configurable)
+
+| Setting                          | Default     |
+|----------------------------------|-------------|
+| Interest rate                    | 2%          |
+| Maximum loan amount              | Rs. 50,000  |
+| Duration rule — up to Rs. 5,000  | 1–6 months  |
+| Duration rule — up to Rs. 20,000 | 3–12 months |
+| Duration rule — up to Rs. 50,000 | 6–24 months |
+
+Interest is applied automatically from group settings when a loan is requested — members do not enter it manually.
